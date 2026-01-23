@@ -90,6 +90,10 @@ router.get('/rooms/:id/availability', async (req, res) => {
 // POST /api/bookings - Create booking with receipt upload
 // =============================================
 router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res) => {
+  console.log('POST /api/bookings - incoming request');
+  console.log('User:', req.user);
+  console.log('Body:', req.body);
+  console.log('File:', req.file ? req.file.filename : null);
   const { roomId, checkIn, checkOut, guests, notes, totalPrice } = req.body;
   const userId = req.user.id;
 
@@ -162,6 +166,7 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
 
     res.status(201).json({
       message: 'Booking request submitted successfully (pending approval)',
+      bookingId: booking._id,
       booking: {
         id: booking._id,
         room: booking.room,
@@ -176,6 +181,10 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
     });
   } catch (err) {
     console.error('Booking creation error:', err);
+    // If the pre-save overlapping check raised an error, surface it as 409
+    if (err && err.message && err.message.toLowerCase().includes('booked')) {
+      return res.status(409).json({ message: err.message });
+    }
     res.status(500).json({ message: 'Server error while creating booking' });
   }
 });

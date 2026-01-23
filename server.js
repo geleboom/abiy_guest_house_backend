@@ -23,7 +23,7 @@ app.use(morgan('dev'));         // Logging
 // Routes - AFTER middleware
 app.use('/api/auth', authRoutes);     // Login/register
 app.use('/api/rooms', roomRoutes);
-app.use('/api', bookingRoutes);       // bookings under /api (or change to /api/bookings)
+app.use('/api/bookings', bookingRoutes);       // bookings under /api/bookings
 
 // Test route (for debugging)
 app.get('/api/test', (req, res) => {
