@@ -43,6 +43,7 @@ const upload = multer({
 // GET /api/bookings/rooms/:id/availability
 // =============================================
 router.get('/rooms/:id/availability', async (req, res) => {
+  console.log(`GET /api/bookings/rooms/${req.params.id}/availability - query:`, req.query);
   const { checkIn, checkOut } = req.query;
 
   if (!checkIn || !checkOut) {
@@ -57,6 +58,7 @@ router.get('/rooms/:id/availability', async (req, res) => {
   }
 
   try {
+    console.log('Parsed dates:', { checkIn, checkOut });
     const overlapping = await Booking.find({
       room: req.params.id,
       status: { $in: ['pending', 'confirmed'] },
