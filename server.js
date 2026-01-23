@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -15,6 +16,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use(cors());                // Allow cross-origin (Flutter app)
 app.use(express.json());        // Parse JSON bodies FIRST
+// Serve uploaded files (receipts) so clients can access returned paths
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(morgan('dev'));         // Logging
 
 // Routes - AFTER middleware
