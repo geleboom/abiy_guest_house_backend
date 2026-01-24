@@ -89,9 +89,47 @@ router.get('/rooms/:id/availability', async (req, res) => {
 // =============================================
 // POST /api/bookings - Create booking with receipt upload
 // =============================================
+// GET /api/bookings/my - return bookings for authenticated user
+router.get('/my', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const bookings = await Booking.find({ user: userId })
+      .populate('room', 'name pricePerNight images')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    // Normalize dates to ISO strings for the client
+    const result = bookings.map(b => ({
+      id: b._id,
+      room: b.room,
+      checkIn: b.checkIn?.toISOString(),
+      checkOut: b.checkOut?.toISOString(),
+      guests: b.guests,
+      totalPrice: b.totalPrice,
+      receiptImage: b.receiptImage,
+      status: b.status,
+      createdAt: b.createdAt?.toISOString(),
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error('Fetch my bookings error:', err && err.message ? err.message : err);
+    if (err && err.stack) console.error(err.stack);
+    res.status(500).json({ message: 'Server error while fetching bookings', detail: err.message || String(err) });
+  }
+});
+
 router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res) => {
   const { roomId, checkIn, checkOut, guests, notes, totalPrice } = req.body;
-  const userId = req.user.id;
+  const userId = req.user && req.user.id;
+
+  // Ensure auth middleware provided a valid user
+  if (!userId) {
+    console.error('Booking attempt without authenticated user:', { body: req.body, headers: req.headers });
+    return res.status(401).json({ message: 'Unauthorized - missing user' });
+  }
 
   // Validate required fields
   if (!roomId || !checkIn || !checkOut || !guests) {
@@ -132,8 +170,10 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
 
     // Calculate total price (fallback to sent value or recalculate)
     const nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-    const calculatedPrice = nights * room.price;
-    const finalPrice = Number(totalPrice) || calculatedPrice;
+    // Room model uses `pricePerNight`
+    const calculatedPrice = nights * (room.pricePerNight || room.price || 0);
+    const parsedTotal = Number(totalPrice);
+    const finalPrice = Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : calculatedPrice;
 
     // Handle receipt image
     let receiptImage = null;
@@ -154,10 +194,28 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
       status: 'pending',
     });
 
-    await booking.save();
+    console.log('Saving booking:', {
+      user: userId,
+      room: roomId,
+      checkIn: start,
+      checkOut: end,
+      guests,
+      totalPrice: finalPrice,
+      receiptImage,
+    });
 
-    // Populate for response
-    await booking.populate('room', 'name price images');
+    try {
+      await booking.save();
+    } catch (saveErr) {
+      console.error('Error saving booking:', saveErr && saveErr.message ? saveErr.message : saveErr);
+      if (saveErr && typeof saveErr.message === 'string' && saveErr.message.includes('already booked')) {
+        return res.status(409).json({ message: 'Room is already booked for these dates' });
+      }
+      throw saveErr;
+    }
+
+    // Populate for response (match Room schema)
+    await booking.populate('room', 'name pricePerNight images');
     await booking.populate('user', 'name email');
 
     res.status(201).json({
@@ -175,8 +233,16 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
       },
     });
   } catch (err) {
-    console.error('Booking creation error:', err);
-    res.status(500).json({ message: 'Server error while creating booking' });
+    // Log detailed server-side error for debugging
+    console.error('Booking creation error:', err && err.message ? err.message : err);
+    if (err && err.stack) console.error(err.stack);
+
+    // If this is a mongoose validation error, return 400 with details
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error', errors: err.errors });
+    }
+
+    res.status(500).json({ message: 'Server error while creating booking', detail: err.message || String(err) });
   }
 });
 

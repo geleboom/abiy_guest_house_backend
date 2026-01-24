@@ -21,7 +21,7 @@ const bookingSchema = new mongoose.Schema({
 });
 
 // Prevent overlapping bookings on save (optional but recommended)
-bookingSchema.pre('save', async function (next) {
+bookingSchema.pre('save', async function () {
   const overlapping = await mongoose.model('Booking').find({
     room: this.room,
     status: { $in: ['pending', 'confirmed'] },
@@ -32,9 +32,8 @@ bookingSchema.pre('save', async function (next) {
   });
 
   if (overlapping.length > 0) {
-    return next(new Error('Room is already booked for these dates'));
+    throw new Error('Room is already booked for these dates');
   }
-  next();
 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
