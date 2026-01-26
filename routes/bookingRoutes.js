@@ -245,5 +245,145 @@ router.post('/', authMiddleware, upload.single('receiptImage'), async (req, res)
     res.status(500).json({ message: 'Server error while creating booking', detail: err.message || String(err) });
   }
 });
+// =============================================
+// GET /pending        → becomes /api/bookings/pending
+// =============================================
+router.get('/pending', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({ status: 'pending' })
+      .populate('room', 'name pricePerNight images')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
 
+    const formatted = bookings.map(b => ({
+      _id: b._id.toString(),
+      room: b.room,
+      user: b.user,
+      checkIn: b.checkIn?.toISOString(),
+      checkOut: b.checkOut?.toISOString(),
+      guests: b.guests,
+      totalPrice: b.totalPrice,
+      receiptImage: b.receiptImage,
+      status: b.status,
+      createdAt: b.createdAt?.toISOString(),
+      notes: b.notes || '',
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    console.error('Pending bookings error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// =============================================
+// GET /pending/count  → /api/bookings/pending/count
+// =============================================
+router.get('/pending/count', authMiddleware, async (req, res) => {
+  try {
+    const count = await Booking.countDocuments({ status: 'pending' });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});router.put('/:id/approve', authMiddleware, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+    
+    console.log(`Approving booking ${req.params.id} - current status: ${booking.status}`);
+
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ message: `Cannot approve booking with status: ${booking.status}` });
+    }
+
+    booking.status = 'confirmed'; // or 'approved' – make sure this matches what user app expects
+    await booking.save();
+
+    console.log(`Booking ${req.params.id} updated to status: ${booking.status}`);
+
+    res.json({
+      message: 'Booking approved successfully',
+      booking: {
+        _id: booking._id,
+        status: booking.status,
+      }
+    });
+  } catch (err) {
+    console.error('Approve error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+// GET /confirmed
+router.get('/confirmed', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({ status: 'confirmed' })
+      .populate('room', 'name pricePerNight images')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = bookings.map(b => ({
+      _id: b._id.toString(),
+      room: b.room,
+      user: b.user,
+      checkIn: b.checkIn?.toISOString(),
+      checkOut: b.checkOut?.toISOString(),
+      guests: b.guests,
+      totalPrice: b.totalPrice,
+      receiptImage: b.receiptImage,
+      status: b.status,
+      createdAt: b.createdAt?.toISOString(),
+      notes: b.notes || '',
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /rejected
+router.get('/rejected', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({ status: 'rejected' })
+      .populate('room', 'name pricePerNight images')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = bookings.map(b => ({
+      _id: b._id.toString(),
+      // ... same formatting as above
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET / (all bookings) - optional but useful for "All" tab
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({})
+      .populate('room', 'name pricePerNight images')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = bookings.map(b => ({
+      _id: b._id.toString(),
+      // ... same formatting
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 module.exports = router;
