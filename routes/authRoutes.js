@@ -4,55 +4,56 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-// REGISTER
+// REGISTER - Supports email OR phoneNumber
 router.post('/register', async (req, res) => {
-  const { email, password, name, phone } = req.body;
+  const { name, email, phoneNumber, password } = req.body;
 
-  // Basic validation
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+  // Validation
+  if (!name || !password || (!email && !phoneNumber)) {
+    return res.status(400).json({ message: 'Name, password, and either email or phone number are required' });
   }
 
-  // Optional: more strict validation
   if (password.length < 6) {
     return res.status(400).json({ message: 'Password must be at least 6 characters' });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: 'Invalid email format' });
-  }
 
   try {
-    // Check if user already exists
-    let user = await User.findOne({ email: email.toLowerCase() });
+    // Check if user already exists (email or phone)
+    let user = await User.findOne({
+      $or: [
+        email ? { email: email.toLowerCase() } : null,
+        phoneNumber ? { phoneNumber } : null,
+      ].filter(Boolean),
+    });
+
     if (user) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      return res.status(400).json({ message: 'User with this email or phone number already exists' });
     }
 
-    // Create new user (password is hashed automatically in model pre-save)
+    // Create new user
     user = new User({
-      email: email.toLowerCase(),
-      password, // will be hashed by mongoose middleware
-      name: name?.trim() || '',
-      phone: phone?.trim() || '',
+      name: name.trim(),
+      email: email ? email.toLowerCase() : undefined,
+      phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
+      password, // hashed by pre-save hook
     });
 
     await user.save();
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, phoneNumber: user.phoneNumber },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Send response (never send password back)
     res.status(201).json({
       token,
       user: {
         id: user._id,
-        email: user.email,
         name: user.name,
-        phone: user.phone,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
       },
     });
   } catch (err) {
@@ -61,30 +62,35 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// LOGIN
+// LOGIN - Now uses identifier (email OR phoneNumber)
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { identifier, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+  if (!identifier || !password) {
+    return res.status(400).json({ message: 'Identifier (email or phone) and password are required' });
   }
 
   try {
-    // Find user (case-insensitive email)
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Find user by email OR phoneNumber (case-insensitive for email)
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { phoneNumber: identifier },
+      ],
+    });
+
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Check password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await user.comparePassword(password); // assuming comparePassword method in model
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, phoneNumber: user.phoneNumber },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -93,9 +99,9 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user._id,
-        email: user.email,
         name: user.name,
-        phone: user.phone,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
       },
     });
   } catch (err) {
@@ -103,6 +109,8 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Server error during login' });
   }
 });
+
+// Admin login (unchanged)
 router.post('/admin-login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -120,4 +128,5 @@ router.post('/admin-login', async (req, res) => {
 
   return res.status(401).json({ message: 'Invalid admin credentials' });
 });
+
 module.exports = router;
