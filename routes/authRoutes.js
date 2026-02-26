@@ -6,7 +6,7 @@ const User = require('../models/User');
 
 // REGISTER - Supports email OR phoneNumber
 router.post('/register', async (req, res) => {
-  const { name, email, phoneNumber, password } = req.body;
+  const { name, email, phone, password } = req.body;
 
   // Validation
   if (!name || !password || (!email && !phoneNumber)) {
@@ -22,7 +22,7 @@ router.post('/register', async (req, res) => {
     let user = await User.findOne({
       $or: [
         email ? { email: email.toLowerCase() } : null,
-        phoneNumber ? { phoneNumber } : null,
+        phone ? { phone } : null,
       ].filter(Boolean),
     });
 
@@ -34,7 +34,7 @@ router.post('/register', async (req, res) => {
     user = new User({
       name: name.trim(),
       email: email ? email.toLowerCase() : undefined,
-      phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
+      phone: phone ? phone.trim() : undefined,
       password, // hashed by pre-save hook
     });
 
@@ -42,7 +42,7 @@ router.post('/register', async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user._id, email: user.email, phoneNumber: user.phoneNumber },
+      { id: user._id, email: user.email, phone: user.phone },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -53,7 +53,7 @@ router.post('/register', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phoneNumber: user.phoneNumber,
+        phone: user.phone,
       },
     });
   } catch (err) {
@@ -75,7 +75,7 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({
       $or: [
         { email: identifier.toLowerCase() },
-        { phoneNumber: identifier },
+        { phone: identifier },
       ],
     });
 
@@ -101,7 +101,7 @@ router.post('/login', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phoneNumber: user.phoneNumber,
+        phone: user.phone,
       },
     });
   } catch (err) {
