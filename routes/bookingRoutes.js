@@ -347,10 +347,43 @@ router.get('/confirmed', authMiddleware, async (req, res) => {
   }
 });
 
+// PUT /:id/reject
+router.put('/:id/reject', authMiddleware, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    console.log(`Rejecting booking ${req.params.id} - current status: ${booking.status}`);
+
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ message: `Cannot reject booking with status: ${booking.status}` });
+    }
+
+    booking.status = 'cancelled';
+    await booking.save();
+
+    console.log(`Booking ${req.params.id} updated to status: ${booking.status}`);
+
+    res.json({
+      message: 'Booking rejected successfully',
+      booking: {
+        _id: booking._id,
+        status: booking.status,
+      },
+    });
+  } catch (err) {
+    console.error('Reject error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // GET /rejected
 router.get('/rejected', authMiddleware, async (req, res) => {
   try {
-    const bookings = await Booking.find({ status: 'rejected' })
+    const bookings = await Booking.find({ status: 'cancelled' })
       .populate('room', 'name pricePerNight images')
       .populate('user', 'name email')
       .sort({ createdAt: -1 })
@@ -358,7 +391,16 @@ router.get('/rejected', authMiddleware, async (req, res) => {
 
     const formatted = bookings.map(b => ({
       _id: b._id.toString(),
-      // ... same formatting as above
+      room: b.room,
+      user: b.user,
+      checkIn: b.checkIn?.toISOString(),
+      checkOut: b.checkOut?.toISOString(),
+      guests: b.guests,
+      totalPrice: b.totalPrice,
+      receiptImage: b.receiptImage,
+      status: b.status,
+      createdAt: b.createdAt?.toISOString(),
+      notes: b.notes || '',
     }));
 
     res.json(formatted);
@@ -367,7 +409,7 @@ router.get('/rejected', authMiddleware, async (req, res) => {
   }
 });
 
-// GET / (all bookings) - optional but useful for "All" tab
+// GET / (all bookings) - useful for "All" tab
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const bookings = await Booking.find({})
@@ -378,7 +420,16 @@ router.get('/', authMiddleware, async (req, res) => {
 
     const formatted = bookings.map(b => ({
       _id: b._id.toString(),
-      // ... same formatting
+      room: b.room,
+      user: b.user,
+      checkIn: b.checkIn?.toISOString(),
+      checkOut: b.checkOut?.toISOString(),
+      guests: b.guests,
+      totalPrice: b.totalPrice,
+      receiptImage: b.receiptImage,
+      status: b.status,
+      createdAt: b.createdAt?.toISOString(),
+      notes: b.notes || '',
     }));
 
     res.json(formatted);
